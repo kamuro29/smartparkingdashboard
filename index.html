@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Parking - Monitoring Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f111a; color: #ffffff; padding: 40px 20px; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        header { margin-bottom: 40px; text-align: center; }
+        h1 { font-size: 2.5rem; color: #00d2ff; margin-bottom: 10px; }
+        .counter-box { background: #1a1d2e; display: inline-block; padding: 15px 30px; border-radius: 50px; font-size: 1.3rem; font-weight: bold; border: 1px solid #00d2ff; box-shadow: 0 0 15px rgba(0,210,255,0.2); }
+        
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 25px; }
+        .card { background: #16192b; border-radius: 15px; padding: 25px; text-align: center; box-shadow: 0 8px 16px rgba(0,0,0,0.4); border-top: 5px solid #555; transition: all 0.3s ease; }
+        .card h2 { font-size: 1.8rem; margin-bottom: 15px; color: #a0a5c5; }
+        .info-p { font-size: 0.95rem; color: #7e84a3; margin: 8px 0; }
+        .val { font-weight: bold; color: #ffffff; }
+        
+        /* Pewarnaan Status */
+        .status-badge { display: inline-block; padding: 6px 15px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; margin-bottom: 15px; }
+        .kosong { background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid #2ecc71; }
+        .terisi { background: rgba(241, 196, 15, 0.15); color: #f1c40f; border: 1px solid #f1c40f; }
+        .overtime { background: rgba(231, 76, 60, 0.15); color: #e74c3c; border: 1px solid #e74c3c; animation: pulse 1.5s infinite; }
+        
+        .countdown { font-size: 1.4rem; font-weight: bold; font-family: 'Courier New', Courier, monospace; color: #00ffcc; margin-top: 5px; }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); box-shadow: 0 0 15px rgba(231,76,60,0.4); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Sistem Monitoring Smart Parking</h1>
+            <div class="counter-box" id="total-mobil">Kapasitas Area: Menyambungkan...</div>
+        </header>
+
+        <div class="grid">
+            <!-- SLOT A1 -->
+            <div class="card" id="card-A1">
+                <h2>Slot A1</h2>
+                <span id="badge-A1" class="status-badge kosong">KOSONG</span>
+                <p class="info-p">Sisa Waktu: <div id="timer-A1" class="countdown">-</div></p>
+                <p class="info-p">Status Bayar: <span id="bayar-A1" class="val">-</span></p>
+            </div>
+
+            <!-- SLOT A2 -->
+            <div class="card" id="card-A2">
+                <h2>Slot A2</h2>
+                <span id="badge-A2" class="status-badge kosong">KOSONG</span>
+                <p class="info-p">Sisa Waktu: <div id="timer-A2" class="countdown">-</div></p>
+                <p class="info-p">Status Bayar: <span id="bayar-A2" class="val">-</span></p>
+            </div>
+
+            <!-- SLOT B1 -->
+            <div class="card" id="card-B1">
+                <h2>Slot B1</h2>
+                <span id="badge-B1" class="status-badge kosong">KOSONG</span>
+                <p class="info-p">Sisa Waktu: <div id="timer-B1" class="countdown">-</div></p>
+                <p class="info-p">Status Bayar: <span id="bayar-B1" class="val">-</span></p>
+            </div>
+
+            <!-- SLOT B2 -->
+            <div class="card" id="card-B2">
+                <h2>Slot B2</h2>
+                <span id="badge-B2" class="status-badge kosong">KOSONG</span>
+                <p class="info-p">Sisa Waktu: <div id="timer-B2" class="countdown">-</div></p>
+                <p class="info-p">Status Bayar: <span id="bayar-B2" class="val">-</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK Core (v9 Compatibility Mode) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <script>
+        // ISI CONFIG SECARA LENGKAP MENGGUNAKAN MILIK PROYEK FIREBASE ANDA
+        const firebaseConfig = {
+            apiKey: "AIzaSyCWYvurgIZbW7RSayEBRzZcRDS1w-dnYeA",
+            authDomain: "smartparkingsystem-8fae4.firebaseapp.com",
+            databaseURL: "https://smartparkingsystem-8fae4-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "smartparkingsystem-8fae4",
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // 1. Pantau Total Kendaraan Aktif di Lapangan (Input dari ESP8266)
+        database.ref("parkir/jumlah").on("value", (snapshot) => {
+            const jumlah = snapshot.val() || 0;
+            document.getElementById("total-mobil").innerText = `Kapasitas Area: ${jumlah} / 4 Mobil`;
+        });
+
+        // 2. Loop Real-time Pemantauan Slot A1 sampai B2
+        const listSlot = ["A1", "A2", "B1", "B2"];
+        
+        listSlot.forEach(slot => {
+            database.ref(`slots/${slot}`).on("value", (snapshot) => {
+                const data = snapshot.val();
+                if (!data) return;
+
+                const cardElement = document.getElementById(`card-${slot}`);
+                const badgeElement = document.getElementById(`badge-${slot}`);
+                const timerElement = document.getElementById(`timer-${slot}`);
+                const bayarElement = document.getElementById(`bayar-${slot}`);
+
+                // Stop interval perhitungan sebelumnya agar memori bersih
+                if (window[`loop-${slot}`]) clearInterval(window[`loop-${slot}`]);
+
+                // KONDISI SLOT: KOSONG
+                if (data.status === "KOSONG") {
+                    cardElement.style.borderTop = "5px solid #2ecc71";
+                    badgeElement.innerText = "KOSONG";
+                    badgeElement.className = "status-badge kosong";
+                    timerElement.innerText = "00j:00m:00s";
+                    timerElement.style.color = "#7e84a3";
+                    bayarElement.innerText = "-";
+                    bayarElement.style.color = "#ffffff";
+                } 
+                // KONDISI SLOT: TERISI
+                else if (data.status === "TERISI") {
+                    bayarElement.innerText = data.status_bayar;
+                    bayarElement.style.color = data.status_bayar === "SUDAH" ? "#2ecc71" : "#f1c40f";
+
+                    // Jalankan perhitungan mundur matematis per 1 detik
+                    window[`loop-${slot}`] = setInterval(() => {
+                        const sekarang = Math.floor(Date.now() / 1000); // Waktu komputer saat ini dalam detik
+                        const waktuBatasAkhir = data.waktu_masuk + (data.durasi_menit * 60);
+                        const selisihDetik = waktuBatasAkhir - sekarang;
+
+                        if (selisihDetik > 0) {
+                            // Masih dalam masa 2 jam parkir normal
+                            cardElement.style.borderTop = "5px solid #f1c40f";
+                            badgeElement.innerText = "TERISI";
+                            badgeElement.className = "status-badge terisi";
+                            timerElement.style.color = "#00ffcc";
+
+                            // Konversi sisa detik menjadi format Jam:Menit:Detik
+                            const jam = Math.floor(selisihDetik / 3600);
+                            const menit = Math.floor((selisihDetik % 3600) / 60);
+                            const detik = selisihDetik % 60;
+
+                            timerElement.innerText = 
+                                `${jam.toString().padStart(2, '0')}j:` + 
+                                `${menit.toString().padStart(2, '0')}m:` + 
+                                `${detik.toString().padStart(2, '0')}s`;
+                        } else {
+                            // Waktu parkir habis (Overtime)
+                            cardElement.style.borderTop = "5px solid #e74c3c";
+                            badgeElement.innerText = "OVERTIME";
+                            badgeElement.className = "status-badge overtime";
+                            timerElement.style.color = "#e74c3c";
+
+                            // Hitung waktu keterlambatan
+                            const waktuLewat = Math.abs(selisihDetik);
+                            const jamLewat = Math.floor(waktuLewat / 3600);
+                            const menitLewat = Math.floor((waktuLewat % 3600) / 60);
+                            const detikLewat = waktuLewat % 60;
+
+                            timerElement.innerText = 
+                                `+${jamLewat.toString().padStart(2, '0')}j:` + 
+                                `${menitLewat.toString().padStart(2, '0')}m:` + 
+                                `${detikLewat.toString().padStart(2, '0')}s`;
+                        }
+                    }, 1000);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
